@@ -2,6 +2,10 @@
 """
 fetch_etf_data.py — 获取 ETF 实时价格和 MA20 均线
 
+数据源（均无需 API Key，国内服务器可用）:
+  实时价: 腾讯财经 qt.gtimg.cn（主）→ 东方财富 push2（备）
+  MA20:   腾讯财经 K线接口（主）→ akshare（备，需安装）
+
 用法:
     python3 fetch_etf_data.py
     python3 fetch_etf_data.py --codes sh510310 sz159338
@@ -14,10 +18,8 @@ fetch_etf_data.py — 获取 ETF 实时价格和 MA20 均线
 
 import argparse
 import json
-import sys
-import time
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 ETF_CONFIGS = {
@@ -25,41 +27,84 @@ ETF_CONFIGS = {
     "sz159338": {"name": "中证A500ETF", "display_code": "159338"},
 }
 
-SINA_URL = "https://hq.sinajs.cn/list={codes}"
-HEADERS = {
-    "Referer": "https://finance.sina.com.cn",
-    "User-Agent": "Mozilla/5.0",
-}
 
-
-def fetch_realtime_price(codes: list[str]) -> dict:
-    """通过新浪财经接口获取实时行情"""
-    url = SINA_URL.format(codes=",".join(codes))
-    req = urllib.request.Request(url, headers=HEADERS)
+def fetch_realtime_price_tencent(codes: list[str]) -> dict:
+    """腾讯财经实时行情（主接口，国内服务器稳定可用）
+    响应格式: v_sh510310="1~名称~代码~现价~昨收~今开~..."
+    字段索引: [0]=类型 [1]=名称 [2]=代码 [3]=现价 [4]=昨收 [5]=今开
+    """
+    url = "https://qt.gtimg.cn/q=" + ",".join(codes)
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            raw = resp.read().decode("gbk")
+            raw = resp.read().decode("gbk", errors="replace")
     except Exception as e:
-        raise RuntimeError(f"新浪接口请求失败: {e}")
+        raise RuntimeError(f"腾讯财经接口请求失败: {e}")
 
     result = {}
     for line in raw.strip().splitlines():
-        # 格式: var hq_str_sh510310="沪深300ETF,3.985,3.980,...";
-        if "=" not in line:
+        if "=" not in line or '~' not in line:
             continue
         key_part, val_part = line.split("=", 1)
-        code = key_part.strip().replace("var hq_str_", "")
-        fields = val_part.strip().strip('"').strip(";").split(",")
+        # key: v_sh510310 → sh510310
+        raw_key = key_part.strip()
+        code = raw_key[2:] if raw_key.startswith("v_") else raw_key
+        fields = val_part.strip().strip('"').strip(";").split("~")
         if len(fields) < 4:
             continue
         try:
-            current_price = float(fields[3])  # 当前价（今日最新）
-            if current_price == 0:
-                current_price = float(fields[2])  # 昨收价 fallback
-            result[code] = current_price
+            price = float(fields[3])  # 现价
+            if price == 0 and len(fields) > 4:
+                price = float(fields[4])  # 昨收价 fallback
+            if price > 0:
+                result[code] = price
         except (ValueError, IndexError):
             continue
     return result
+
+
+def fetch_realtime_price_eastmoney(codes: list[str]) -> dict:
+    """东方财富实时行情（备用接口）
+    secids 格式: 1.510310（沪市）, 0.159338（深市）
+    """
+    secids = []
+    for c in codes:
+        prefix = "1" if c.startswith("sh") else "0"
+        num = c[2:]
+        secids.append(f"{prefix}.{num}")
+    url = (
+        "https://push2.eastmoney.com/api/qt/ulist.np/get"
+        "?fltt=2&invt=2&fields=f2,f12,f14&secids=" + ",".join(secids)
+    )
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.eastmoney.com"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        result = {}
+        for item in data.get("data", {}).get("diff", []):
+            code_num = item.get("f12", "")
+            price = item.get("f2")
+            if code_num and price and float(price) > 0:
+                # 匹配回 sh/sz 前缀
+                for c in codes:
+                    if c[2:] == str(code_num):
+                        result[c] = float(price)
+        return result
+    except Exception as e:
+        raise RuntimeError(f"东方财富接口请求失败: {e}")
+
+
+def fetch_realtime_price(codes: list[str]) -> dict:
+    """获取实时价格：腾讯（主）→ 东方财富（备）"""
+    try:
+        prices = fetch_realtime_price_tencent(codes)
+        if prices:
+            return prices
+    except Exception:
+        pass
+    return fetch_realtime_price_eastmoney(codes)
 
 
 def fetch_ma20_tencent(display_code: str, market_prefix: str) -> float | None:

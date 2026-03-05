@@ -33,7 +33,7 @@ print_step()    { echo -e "${CYAN}[步骤]${NC} $1"; }
 print_banner() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════╗"
-    echo "║    🤖 WeChat AI Assistant 部署工具       ║"
+    echo "║         🤖 WeClaw 部署工具               ║"
     echo "╚══════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -220,6 +220,10 @@ if ! command -v npm &>/dev/null; then
 fi
 
 cd "${REMOTE_PATH}"
+
+echo ">>> 清理 Python 字节码缓存..."
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find . -name "*.pyc" -delete 2>/dev/null || true
 
 echo ">>> 安装 npm 依赖（含 devDependencies，用于构建）..."
 npm install

@@ -1,4 +1,4 @@
-# 🤖 微信 AI 助理 (WeChat AI Assistant)
+# 🤖 WeClaw
 
 一个精简版、本地优先的个人 AI 助理，通过微信测试号与你对话，拥有终端执行和文件读写能力。
 
@@ -21,7 +21,7 @@
 
 ### 1. 安装依赖
 ```bash
-cd wechat-ai-assistant
+cd weclaw
 npm install
 ```
 
@@ -66,7 +66,7 @@ ngrok http 3000
 ## 📁 项目结构
 
 ```
-wechat-ai-assistant/
+weclaw/
 ├── src/
 │   ├── server.ts          # 主入口：Express + 微信 Webhook
 │   ├── agent/

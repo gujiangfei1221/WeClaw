@@ -7,7 +7,21 @@ metadata: { "openclaw": { "emoji": "🌤️", "requires": { "bins": ["curl"] } }
 
 # Weather Skill
 
-Get current weather conditions and forecasts.
+Get current weather conditions and forecasts using **bash_execute** tool with curl commands.
+
+## ⚠️ 重要：如何使用此技能
+
+**必须使用 `bash_execute` 工具执行 curl 命令**，不存在独立的 `weather` 工具！
+
+示例：
+```json
+{
+  "name": "bash_execute",
+  "arguments": {
+    "command": "curl -s --max-time 10 'wttr.in/Shanghai?format=3'"
+  }
+}
+```
 
 ## When to Use
 
@@ -31,7 +45,7 @@ Get current weather conditions and forecasts.
 
 ## Location
 
-Always include a city, region, or airport code in weather queries.
+Always include a city, region, or airport code in weather queries. 中文城市名建议使用拼音（如 Shanghai, Beijing, Zhangjiagang）。
 
 ## ⚠️ 网络诊断（服务器环境必看）
 

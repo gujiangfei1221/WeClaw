@@ -1,6 +1,8 @@
 # OpenClaw 核心设计总结
 
-> **目标**：分析 OpenClaw 的核心架构设计，为后续开发简易版本 AI 助理提供参考。
+> **本文档用途**：分析 OpenClaw 的核心架构设计，为 **WeClaw** 项目提供架构参考。
+> 
+> **WeClaw** 是基于 OpenClaw 架构理念的轻量级微信 AI 助理，保留了核心的 Gateway、Agent、Session 和 Tool 系统，去除了多渠道集成、复杂插件等功能，专注于微信生态。
 
 ---
 
