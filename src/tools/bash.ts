@@ -12,7 +12,7 @@ const MAX_OUTPUT_LENGTH = 4000; // 限制输出长度，避免爆上下文
  * 如果是多人服务，必须加上沙箱/白名单机制。
  */
 export async function bashExecute(command: string, cwd?: string): Promise<string> {
-  const workDir = cwd || process.env.WORKSPACE_DIR || process.cwd();
+  const workDir = cwd || process.cwd();
   const startTime = Date.now();
 
   // 日志：打印即将执行的命令（截断超长命令）

@@ -67,7 +67,7 @@ ngrok http 3000
 
 ```
 weclaw/
-├── src/
+├── src/                   # 源代码
 │   ├── server.ts          # 主入口：Express + 微信 Webhook
 │   ├── agent/
 │   │   ├── loop.ts        # 🧠 ReAct 循环引擎（核心！）
@@ -82,13 +82,25 @@ weclaw/
 │   ├── memory/
 │   │   └── index.ts       # SQLite 长期记忆
 │   ├── skills/
-│   │   └── loader.ts      # Markdown 技能加载器
+│   │   ├── loader.ts      # Markdown 技能加载器
+│   │   └── clawhub.ts     # ClawHub 技能商店集成
 │   └── cron/
 │       └── manager.ts     # 定时任务管理器
-├── workspace/
-│   └── skills/            # 放置你的自定义 Skill
+├── config/                # 配置文件
+│   └── skills/            # 技能定义文件
 │       ├── code-review.md
-│       └── morning-greeting.md
+│       ├── morning-greeting.md
+│       └── ...
+├── data/                  # 运行时数据（已加入 .gitignore）
+│   └── memory.db          # SQLite 数据库
+├── scripts/               # 工具脚本
+│   ├── ticktick/          # TickTick 相关脚本
+│   ├── a-share-investor/  # A股投资相关脚本
+│   └── ...
+├── devops/                # 部署脚本
+│   ├── deploy.sh
+│   └── logs.sh
+├── dist/                  # 编译输出
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -96,7 +108,7 @@ weclaw/
 
 ## 🔧 自定义 Skill
 
-在 `workspace/skills/` 目录下创建 `.md` 文件即可：
+在 `config/skills/` 目录下创建 `.md` 文件即可：
 
 ```markdown
 ---
@@ -128,7 +140,7 @@ TICKTICK_OAUTH_BASE_URL=https://dida365.com
 运行：
 
 ```bash
-python3 workspace/skills/ticktick-manager/scripts/oauth_get_token.py \
+python3 scripts/ticktick/oauth_get_token.py \
   --client-id "你的ClientID" \
   --client-secret "你的ClientSecret" \
   --redirect-uri "你的RedirectURI"
@@ -139,7 +151,7 @@ python3 workspace/skills/ticktick-manager/scripts/oauth_get_token.py \
 ### 3) 验证 API 是否可用
 
 ```bash
-python3 workspace/skills/ticktick-manager/scripts/ticktick_api.py list-projects
+python3 scripts/ticktick/ticktick_api.py list-projects
 ```
 
 正常会返回项目 JSON 列表。
@@ -148,32 +160,32 @@ python3 workspace/skills/ticktick-manager/scripts/ticktick_api.py list-projects
 
 ```bash
 # 列出项目
-python3 workspace/skills/ticktick-manager/scripts/ticktick_api.py list-projects
+python3 scripts/ticktick/ticktick_api.py list-projects
 
 # 列出项目任务
-python3 workspace/skills/ticktick-manager/scripts/ticktick_api.py list-tasks --project-id <projectId>
+python3 scripts/ticktick/ticktick_api.py list-tasks --project-id <projectId>
 
 # 创建任务
-python3 workspace/skills/ticktick-manager/scripts/ticktick_api.py create-task --project-id <projectId> --title "任务标题"
+python3 scripts/ticktick/ticktick_api.py create-task --project-id <projectId> --title "任务标题"
 
 # 更新任务
-python3 workspace/skills/ticktick-manager/scripts/ticktick_api.py update-task --task-id <taskId> --title "新标题"
+python3 scripts/ticktick/ticktick_api.py update-task --task-id <taskId> --title "新标题"
 
 # 完成任务
-python3 workspace/skills/ticktick-manager/scripts/ticktick_api.py complete-task --project-id <projectId> --task-id <taskId>
+python3 scripts/ticktick/ticktick_api.py complete-task --project-id <projectId> --task-id <taskId>
 
 # 删除任务
-python3 workspace/skills/ticktick-manager/scripts/ticktick_api.py delete-task --project-id <projectId> --task-id <taskId>
+python3 scripts/ticktick/ticktick_api.py delete-task --project-id <projectId> --task-id <taskId>
 ```
 
 ### 5) 刷新 Token（可自动回写 `.env`）
 
 ```bash
 # 仅刷新并打印
-python3 workspace/skills/ticktick-manager/scripts/oauth_refresh_token.py
+python3 scripts/ticktick/oauth_refresh_token.py
 
 # 刷新并自动写回 .env
-python3 workspace/skills/ticktick-manager/scripts/oauth_refresh_token.py --write-env
+python3 scripts/ticktick/oauth_refresh_token.py --write-env
 ```
 
 ## ⚠️ 安全提示

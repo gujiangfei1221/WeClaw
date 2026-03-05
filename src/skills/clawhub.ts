@@ -6,7 +6,7 @@ import fs from "node:fs";
 // ==================== ClawHub 技能商店集成 ====================
 // 让 AI 助理可以自主从 ClawHub 搜索和安装新技能
 
-const SKILLS_DIR = path.resolve(process.env.WORKSPACE_DIR || ".", "skills");
+const SKILLS_DIR = path.resolve(process.env.CONFIG_DIR || "config", "skills");
 
 /**
  * 确保 clawhub CLI 已安装

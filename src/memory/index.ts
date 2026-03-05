@@ -10,7 +10,7 @@ let db: Database.Database | null = null;
  * 初始化记忆数据库
  */
 export function initMemoryDB(dbPath?: string): void {
-  const resolvedPath = dbPath || path.resolve(process.env.WORKSPACE_DIR || ".", "memory.db");
+  const resolvedPath = dbPath || path.resolve(process.env.DATA_DIR || "data", "memory.db");
   db = new Database(resolvedPath);
 
   db.exec(`

@@ -3,9 +3,9 @@ import path from "node:path";
 
 // ==================== Skills 动态加载系统（升级版） ====================
 // 兼容两种模式：
-// 1. 扁平模式：workspace/skills/my-skill.md（你自己写的简单 Skill）
-// 2. 目录模式：workspace/skills/weather/SKILL.md（OpenClaw / ClawHub 标准格式）
-//    支持子目录中的 scripts/ references/ assets/
+// 1. 扁平模式：config/skills/my-skill.md（你自己写的简单 Skill）
+// 2. 目录模式：config/skills/weather/SKILL.md（OpenClaw / ClawHub 标准格式）
+//    支持子目录中的 references/ assets/（scripts 已迁移到 scripts/ 目录）
 
 export interface Skill {
   name: string;
@@ -21,14 +21,14 @@ export interface Skill {
 }
 
 /**
- * 从 workspace/skills/ 目录加载所有 Skill
+ * 从 config/skills/ 目录加载所有 Skill
  *
  * 扫描规则（优先级）：
  * 1. 子目录下的 SKILL.md（ClawHub / OpenClaw 标准格式）
  * 2. 顶层的 *.md 文件（自定义简易 Skill）
  */
 export function loadSkills(skillsDir?: string): Skill[] {
-  const dir = skillsDir || path.resolve(process.env.WORKSPACE_DIR || ".", "skills");
+  const dir = skillsDir || path.resolve(process.env.CONFIG_DIR || "config", "skills");
 
   if (!fs.existsSync(dir)) {
     console.log("[Skills] 技能目录不存在，跳过加载:", dir);
@@ -48,7 +48,7 @@ export function loadSkills(skillsDir?: string): Skill[] {
           // 检测附带资源
           const skillDir = path.join(dir, entry.name);
           skill.skillDir = skillDir;
-          skill.hasScripts = fs.existsSync(path.join(skillDir, "scripts"));
+          skill.hasScripts = false; // scripts 已迁移到项目根目录 scripts/
           skill.hasReferences = fs.existsSync(path.join(skillDir, "references"));
           skills.push(skill);
         }
@@ -134,7 +134,6 @@ export function buildSkillsPrompt(skills: Skill[]): string {
       let summary = `### 技能: ${s.name}`;
       if (s.description) summary += `\n${s.description}`;
       summary += `\n> 完整指令文件: ${s.filePath}（可用 read_file 工具查看详细内容）`;
-      if (s.hasScripts) summary += `\n> 附带脚本: ${s.skillDir}/scripts/`;
       if (s.hasReferences) summary += `\n> 参考文档: ${s.skillDir}/references/`;
       return summary;
     }
