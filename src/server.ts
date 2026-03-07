@@ -5,7 +5,7 @@ import { parseWechatXml, buildTextReplyXml, verifyWechatSignature } from "./wech
 import { sendCustomerMessage } from "./wechat/api.js";
 import { initMemoryDB } from "./memory/index.js";
 import { initAgent, runAgentLoop } from "./agent/loop.js";
-import { setCronTriggerCallback } from "./cron/manager.js";
+import { setCronTriggerCallback, initCronDB } from "./cron/manager.js";
 import { startSessionCleanup } from "./agent/session.js";
 import { logger } from "./utils/logger.js";
 import { initConfigStore, setConfig, getConfig, unsetConfig, listConfigKeys } from "./config/store.js";
@@ -274,9 +274,22 @@ async function start(): Promise<void> {
   // 注册 Cron 触发回调：定时任务到期时，自动拉起 Agent 并推送结果到微信
   setCronTriggerCallback(async (userId: string, prompt: string) => {
     logger.info("Cron", `为用户 ${userId} 执行定时任务`);
-    const result = await runAgentLoop(userId, prompt);
-    await sendCustomerMessage(userId, `⏰ 定时任务结果:\n${result}`);
+    const startTime = Date.now();
+    try {
+      const result = await runAgentLoop(userId, prompt);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      logger.info("Cron", `Agent 处理完成，耗时 ${elapsed}s`);
+
+      await sendCustomerMessage(userId, `⏰ 定时任务结果:\n${result}`);
+      logger.info("Cron", `定时任务消息已成功发送给 ${userId}`);
+    } catch (error: any) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      logger.error("Cron", `定时任务执行/发送失败 [${userId}]，耗时 ${elapsed}s:`, error);
+    }
   });
+
+  // 初始化 Cron 持久化 & 恢复已有任务（必须在 setCronTriggerCallback 之后）
+  initCronDB();
 
   // 启动 Session 过期清理
   startSessionCleanup();

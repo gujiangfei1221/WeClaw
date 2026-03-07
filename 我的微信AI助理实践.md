@@ -215,6 +215,7 @@ AI 可以调用的工具：
 | `add_cron_job` | 添加定时任务 | 每天 9 点提醒定投 |
 | `list_cron_jobs` | 列出定时任务 | 查看所有定时任务 |
 | `remove_cron_job` | 删除定时任务 | 取消定时提醒 |
+| `edit_file` + `bash_execute` | 备忘录管理 | 记录/检索软件 License、账号信息等 |
 
 **工具调用示例：**
 
@@ -252,7 +253,89 @@ CREATE TABLE memories (
 - 用户说"我的定投基础金额是 200 元" → AI 调用 `save_memory` 保存
 - 下次用户问"帮我定投" → AI 调用 `search_memory` 查到"定投基础金额 200 元"
 
-### 6. 定时任务
+### 6. 备忘录系统
+
+#### 设计背景：两类信息的分离
+
+WeClaw 管理两类截然不同的信息：
+
+| 类型 | 工具 | 特点 |
+|------|------|------|
+| **任务** | 滴答清单技能 | 有截止时间、需要完成、需要提醒 |
+| **备忘** | 本地 Markdown 文件 | 结构化信息片段、需要随时检索 |
+
+备忘的典型场景：软件 License Key、账号信息、下载链接、API Token 等——这些信息没有截止时间，但需要随时能查到。
+
+#### 为什么不用向量数据库（RAG）？
+
+这是一个值得深思的技术选型问题。传统 RAG 的流程是：
+
+```
+用户问题 → embedding → 向量检索 → top-k 文档片段 → LLM 回答
+```
+
+但对于结构化备忘场景，传统 RAG 有几个根本性缺陷：
+
+1. **分块破坏信息完整性**：一条软件备忘包含名称、下载地址、License Key、账号等字段，向量分块会把这些字段切到不同 chunk，导致信息不完整
+2. **精确字段不适合语义检索**：License Key、URL 这类精确信息，embedding 相似度检索反而不如关键字匹配准确
+3. **复杂度与收益不匹配**：向量数据库需要额外服务、embedding 调用、索引维护，而几百条备忘用 grep 毫秒级搞定
+
+#### AI 友好文档 + grep：更优的方案
+
+灵感来源于 Claude Code、Cursor 等工具的实践：**与其依赖向量相似度，不如让 AI 直接读取结构化的、对 AI 友好的文档**。
+
+```
+用户问题 → grep 关键字 → 返回完整条目 → LLM 理解完整上下文 → 精准回答
+```
+
+核心优势：
+- **grep 精确命中**：没有召回率问题，关键字一定找到对应条目
+- **完整条目**：LLM 拿到的是一整条完整备忘，不会丢失 Key 或 URL
+- **零额外依赖**：用现有 `bash_execute` + `read_file` + `edit_file` 工具，不需要写任何新代码
+- **人也能直接读**：Markdown 格式，打开文件一目了然
+
+#### 备忘录格式设计
+
+每条备忘是一个独立的、可 grep 的原子单元：
+
+```markdown
+---
+id: memo-20260306001
+type: software
+title: CleanMyMac X
+tags: [工具软件, Mac清理]
+date: 2026-03-06
+---
+软件名：CleanMyMac X
+下载地址：https://macpaw.com/download/cleanmymac
+License Key：XXXX-XXXX-XXXX-XXXX
+支持设备数：3台
+购买邮箱：xxx@gmail.com
+```
+
+`type` 分类：`software`、`account`、`api`、`link`、`note`
+
+**检索方式：**
+
+```bash
+# 查找 CleanMyMac 的 Key
+grep -i -A 20 "cleanmymac" config/data/memos.md
+
+# 查找所有软件类备忘
+grep -A 20 "type: software" config/data/memos.md
+```
+
+#### 与记忆系统的区别
+
+| 维度 | 记忆系统（Memory） | 备忘录（Memo） |
+|------|-------------------|---------------|
+| **存储** | SQLite | Markdown 文件 |
+| **内容** | 用户偏好、对话摘要 | 软件、账号、链接等结构化信息 |
+| **检索** | 关键字模糊匹配 | grep 精确匹配 |
+| **写入时机** | AI 自动判断保存 | 用户明确说"帮我记一下" |
+| **适用场景** | "记住我喜欢吃辣" | "记下 Cursor 的 License Key" |
+
+### 7. 定时任务
 
 支持 Cron 表达式，AI 可以主动在指定时间触发任务。
 

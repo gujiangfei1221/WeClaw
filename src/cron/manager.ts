@@ -1,8 +1,10 @@
 import cron from "node-cron";
+import Database from "better-sqlite3";
+import path from "node:path";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { logger } from "../utils/logger.js";
 
-// ==================== Cron 定时任务管理器 ====================
+// ==================== Cron 定时任务管理器（SQLite 持久化） ====================
 
 interface CronJob {
   id: string;
@@ -14,11 +16,98 @@ interface CronJob {
   createdAt: string;
 }
 
+/** 数据库行类型 */
+interface CronJobRow {
+  id: string;
+  expression: string;
+  description: string;
+  user_id: string;
+  prompt: string;
+  created_at: string;
+}
+
 const jobs = new Map<string, CronJob>();
 let nextId = 1;
+let db: Database.Database | null = null;
 
 // 用于存放外部回调，由 server.ts 注入
 let onCronTrigger: ((userId: string, prompt: string) => Promise<void>) | null = null;
+
+/**
+ * 初始化 Cron 持久化数据库，并从中恢复已有任务
+ *
+ * 必须在 setCronTriggerCallback 之后调用（因为恢复任务时需要回调已注入）
+ */
+export function initCronDB(dbPath?: string): void {
+  const resolvedPath = dbPath || path.resolve(process.env.DATA_DIR || "data", "memory.db");
+  db = new Database(resolvedPath);
+
+  // 建表（如果不存在）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cron_jobs (
+      id TEXT PRIMARY KEY,
+      expression TEXT NOT NULL,
+      description TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    );
+  `);
+
+  logger.info("Cron", `定时任务持久化表初始化完成`);
+
+  // 从数据库恢复任务
+  restoreJobs();
+}
+
+/**
+ * 从数据库恢复所有定时任务（服务启动时调用）
+ */
+function restoreJobs(): void {
+  if (!db) return;
+
+  const rows = db.prepare("SELECT * FROM cron_jobs").all() as CronJobRow[];
+
+  if (rows.length === 0) {
+    logger.info("Cron", "数据库中无持久化任务");
+    return;
+  }
+
+  for (const row of rows) {
+    // 提取数字 ID，更新 nextId 避免冲突
+    const numId = parseInt(row.id.replace("cron_", ""), 10);
+    if (!isNaN(numId) && numId >= nextId) {
+      nextId = numId + 1;
+    }
+
+    // 注册 node-cron 调度器
+    const task = cron.schedule(row.expression, async () => {
+      logger.info("Cron", `触发任务 ${row.id}: ${row.description}`);
+      if (onCronTrigger) {
+        try {
+          await onCronTrigger(row.user_id, `[定时任务触发] ${row.description}\n请执行: ${row.prompt}`);
+        } catch (err) {
+          logger.error("Cron", `任务 ${row.id} 执行失败:`, err);
+        }
+      }
+    });
+
+    const job: CronJob = {
+      id: row.id,
+      expression: row.expression,
+      description: row.description,
+      userId: row.user_id,
+      prompt: row.prompt,
+      task,
+      createdAt: row.created_at,
+    };
+
+    jobs.set(row.id, job);
+    logger.info("Cron", `已恢复任务 ${row.id}: "${row.description}" (${row.expression})`);
+  }
+
+  logger.info("Cron", `共恢复 ${rows.length} 个定时任务`);
+}
 
 /**
  * 注册 Cron 触发时的回调函数
@@ -30,7 +119,7 @@ export function setCronTriggerCallback(
 }
 
 /**
- * 添加一个定时任务
+ * 添加一个定时任务（内存 + 数据库）
  */
 export function addCronJob(
   userId: string,
@@ -55,6 +144,8 @@ export function addCronJob(
     }
   });
 
+  const createdAt = new Date().toLocaleString("zh-CN");
+
   const job: CronJob = {
     id,
     expression,
@@ -62,10 +153,22 @@ export function addCronJob(
     userId,
     prompt,
     task,
-    createdAt: new Date().toLocaleString("zh-CN"),
+    createdAt,
   };
 
   jobs.set(id, job);
+
+  // 持久化到数据库
+  if (db) {
+    try {
+      db.prepare(
+        "INSERT OR REPLACE INTO cron_jobs (id, expression, description, user_id, prompt, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      ).run(id, expression, description, userId, prompt, createdAt);
+    } catch (err) {
+      logger.error("Cron", `持久化任务 ${id} 失败:`, err);
+    }
+  }
+
   logger.info("Cron", `已注册任务 ${id}: "${description}" (${expression})`);
 
   return `定时任务已创建:\n- ID: ${id}\n- 调度: ${expression}\n- 描述: ${description}\n- 执行内容: ${prompt}`;
@@ -84,7 +187,7 @@ export function listCronJobs(userId: string): string {
 }
 
 /**
- * 删除定时任务
+ * 删除定时任务（内存 + 数据库）
  */
 export function removeCronJob(jobId: string): string {
   const job = jobs.get(jobId);
@@ -92,6 +195,16 @@ export function removeCronJob(jobId: string): string {
 
   job.task.stop();
   jobs.delete(jobId);
+
+  // 从数据库删除
+  if (db) {
+    try {
+      db.prepare("DELETE FROM cron_jobs WHERE id = ?").run(jobId);
+    } catch (err) {
+      logger.error("Cron", `从数据库删除任务 ${jobId} 失败:`, err);
+    }
+  }
+
   return `定时任务 ${jobId}（${job.description}）已删除`;
 }
 

@@ -119,28 +119,39 @@ export async function sendCustomerMessage(openId: string, content: string): Prom
   const MAX_LENGTH = 600; // 保险起见，中文约 600 字符
   const chunks = splitMessage(content, MAX_LENGTH);
 
-  for (const chunk of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
     const token = await getAccessToken();
     const url = `https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token=${token}`;
 
-    const { data } = await axios.post(url, {
+    const payload = {
       touser: openId,
       msgtype: "text",
       text: { content: chunk },
-    });
+    };
+
+    const { data } = await axios.post(url, payload);
 
     if (data.errcode && data.errcode !== 0) {
       logger.error("微信", `发送客服消息失败: ${data.errcode} - ${data.errmsg}`);
+
       // 如果是 token 过期，清除缓存重试一次
       if (data.errcode === 40001 || data.errcode === 42001) {
         invalidateToken();
         const freshToken = await getAccessToken();
         const retryUrl = `https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token=${freshToken}`;
-        await axios.post(retryUrl, {
-          touser: openId,
-          msgtype: "text",
-          text: { content: chunk },
-        });
+        const retryRes = await axios.post(retryUrl, payload);
+
+        if (retryRes.data.errcode && retryRes.data.errcode !== 0) {
+          throw new Error(
+            `客服消息重试仍失败: ${retryRes.data.errcode} - ${retryRes.data.errmsg}`,
+          );
+        }
+      } else {
+        // 非 token 类错误，直接抛出异常让调用方感知
+        throw new Error(
+          `客服消息发送失败: ${data.errcode} - ${data.errmsg}`,
+        );
       }
     }
 
@@ -149,6 +160,8 @@ export async function sendCustomerMessage(openId: string, content: string): Prom
       await new Promise((r) => setTimeout(r, 300));
     }
   }
+
+  logger.info("微信", `客服消息发送成功 [${openId}]，共 ${chunks.length} 条`);
 }
 
 /**
