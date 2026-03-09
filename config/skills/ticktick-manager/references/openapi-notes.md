@@ -37,12 +37,26 @@ Content-Type: application/json
 - `projectId` (string)
 - `title` (string, required)
 - `content` (string, optional)
-- `dueDate` (RFC3339 datetime string, optional)
+- `desc` (string, optional)
+- `isAllDay` (boolean, optional)
+- `startDate` (datetime string, optional)
+- `dueDate` (datetime string, optional)
+- `timeZone` (string, optional)
+- `reminders` (list, optional)
+- `repeatFlag` (string, optional)
 - `priority` (number, optional)
+- `sortOrder` (number, optional)
+- `items` (list, optional)
+
+时间格式使用官方格式：`yyyy-MM-dd'T'HH:mm:ssZ`
+
+示例：`2026-03-10T21:00:00+0800`
 
 ## Practical Tips
 
 - Always start with listing projects to find the correct `projectId`.
-- Use ISO/RFC3339 datetime with timezone, e.g. `2026-02-25T10:00:00+08:00`.
-- Keep payload minimal first (`title`, `projectId`), then add optional fields.
+- For timed tasks, prefer `isAllDay=false` with `startDate`, `dueDate`, and `timeZone`.
+- If you want a visible reminder time in TickTick, do not rely on `title` alone; send the proper time fields too.
+- Use official datetime format with timezone offset, e.g. `2026-03-10T21:00:00+0800`.
+- For immediate reminder at the specified time, `reminders` can include `"TRIGGER:PT0S"`.
 - Log status code and response body for debugging.

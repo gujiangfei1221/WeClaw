@@ -186,12 +186,58 @@ done
 
 #### 其他 API 操作
 
+#### 创建任务时的标题与内容规则
+
+- **不要过度总结**：除非用户明确要求简写，否则不要把任务压缩成单个名词或过短短语
+- **优先保留用户原意**：标题应保留动作、对象、提醒语气和关键上下文，避免把“明天晚上记得提醒我洗澡”压缩成“洗澡”
+- **标题长度策略**：优先生成自然、可读、可直接理解的标题；可以适度整理措辞，但不要丢失关键语义
+- **时间确认后标题要显式带时间**：一旦用户已经确认了具体日期和时间，标题优先写成“日期 + 时间 + 动作”的形式，方便在滴答清单列表里一眼看懂，例如 `3.10 晚上9点提醒我洗澡`、`3月11日 08:30 提醒我提交报销单`
+- **有时间信息时**：时间应主要写入 `dueDate`；若时间本身是任务理解的重要上下文，也应同步体现在标题中，而不是只写进 `dueDate`
+- **时间信息要足够精确**：只有当日期和时间粒度已经足够落库时，才允许直接创建任务；如果只有“明天晚上”“周末”“下班后”“过会儿”这类模糊时间，必须先追问用户确认，不要擅自默认成 `20:00`、`21:00` 或其他具体时刻
+- **先推断能推断的部分，再追问缺失部分**：例如系统已知道当前北京时间，因此“明天”可以换算成具体日期；但“晚上”不是具体时间，仍然必须追问“你希望我几点提醒你？”
+- **补充原话到 `content`**：当用户原话包含提醒背景、补充说明或口语化表达时，把原始意图或整理后的完整描述写入 `content`，不要只写 `title`
+- **字段分工**：`title` 负责让用户在列表中一眼看懂“哪天几点做什么”，`content` 负责保留原始需求与补充说明
+- **有具体时刻时的字段写法**：如果用户提到了明确时间点（如 `晚上9点`、`08:30`），创建任务时优先使用 `isAllDay: false`、`startDate`、`dueDate`、`timeZone: "Asia/Shanghai"`；不要只写 `dueDate`
+- **提醒展示优先策略**：为了让滴答清单中显示出明确时间标签，优先把同一个具体时刻同时写入 `startDate` 和 `dueDate`；如需要即时提醒，可补充 `reminders`
+- **全天任务策略**：只有当用户只给了日期、没有具体时刻时，才考虑用 `isAllDay: true` 的全天任务；如果有具体几点，禁止写成全天任务
+- **时间格式**：`startDate` 和 `dueDate` 使用官方格式 `yyyy-MM-dd'T'HH:mm:ssZ`，例如 `2026-03-10T21:00:00+0800`
+- **默认项目**：如果用户说的是“加到 inbox / 收集箱”，务必写入对应项目；如果未指定项目，再按默认策略处理
+- **未确认前禁止创建**：只要关键时间、对象或执行条件仍然模糊，就先向用户提一个最小必要问题，等用户回复后再调用创建 API
+
+**创建示例：**
+
+- 用户说：`帮我往滴答清单的inbox增加1个任务：明天晚上记得提醒我洗澡`
+  - 不能直接创建，因为“明天”可推断，但“晚上”不够精确
+  - 应先追问：`你希望我明天晚上几点提醒你洗澡？`
+  - 如果用户回复：`晚上9点吧`
+  - 再创建为：
+    - 推荐 `title`：`3.10 晚上9点提醒我洗澡`
+    - 推荐 `content`：`原始需求：明天晚上记得提醒我洗澡`
+    - 推荐 `isAllDay`：`false`
+    - 推荐 `startDate`：`2026-03-10T21:00:00+0800`
+    - 推荐 `dueDate`：`2026-03-10T21:00:00+0800`
+    - 推荐 `timeZone`：`Asia/Shanghai`
+    - 如需到点提醒，可加 `reminders`：`["TRIGGER:PT0S"]`
+- 用户说：`提醒我下周一提交报销单，别忘了带发票`
+  - 推荐 `title`：`下周一提醒我提交报销单`
+  - 推荐 `content`：`补充说明：别忘了带发票`
+- 用户说：`帮我加个待办，周末和爸妈视频`
+  - 推荐 `title`：`周末和爸妈视频`
+  - 如无额外补充，可不写 `content`
+
 ```bash
-# 创建任务
+# 创建任务（有具体时刻）
 curl -s --max-time 10 -X POST \
   -H "Authorization: Bearer <TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{"title":"<任务标题>","projectId":"<projectId>","dueDate":"<ISO8601日期>"}' \
+  -d '{"title":"<任务标题>","content":"<补充说明或原始意图>","projectId":"<projectId>","isAllDay":false,"startDate":"<yyyy-MM-ddTHH:mm:ssZ>","dueDate":"<yyyy-MM-ddTHH:mm:ssZ>","timeZone":"Asia/Shanghai","reminders":["TRIGGER:PT0S"]}' \
+  "https://api.dida365.com/open/v1/task"
+
+# 创建任务（只有日期，没有具体时刻）
+curl -s --max-time 10 -X POST \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"<任务标题>","content":"<补充说明或原始意图>","projectId":"<projectId>","isAllDay":true,"startDate":"<yyyy-MM-ddTHH:mm:ssZ>","dueDate":"<yyyy-MM-ddTHH:mm:ssZ>"}' \
   "https://api.dida365.com/open/v1/task"
 
 # 完成任务
@@ -208,7 +254,7 @@ curl -s --max-time 10 -X DELETE \
 curl -s --max-time 10 -X POST \
   -H "Authorization: Bearer <TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{"title":"<新标题>","dueDate":"<新日期>","priority":<0-5>}' \
+  -d '{"title":"<新标题>","isAllDay":false,"startDate":"<yyyy-MM-ddTHH:mm:ssZ>","dueDate":"<yyyy-MM-ddTHH:mm:ssZ>","timeZone":"Asia/Shanghai","priority":<0-5>,"repeatFlag":"<RRULE，可选>"}' \
   "https://api.dida365.com/open/v1/task/<taskId>"
 ```
 

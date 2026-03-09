@@ -130,8 +130,8 @@ export function buildSkillsPrompt(skills: Skill[]): string {
   if (skills.length === 0) return "";
 
   const sections = skills.map((s) => {
-    // 如果 Skill 正文超过 2000 字符，只注入摘要，避免爆上下文
-    if (s.content.length > 2000) {
+    // 如果 Skill 正文超过 12000 字符，只注入摘要，避免爆上下文
+    if (s.content.length > 12000) {
       let summary = `### 技能: ${s.name}`;
       if (s.description) summary += `\n${s.description}`;
       summary += `\n> 完整指令文件: ${s.filePath}（可用 read_file 工具查看详细内容）`;
