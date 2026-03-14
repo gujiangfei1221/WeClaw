@@ -11,3 +11,6 @@ data/*
 devops/deploy.conf
 docs/我的微信AI助理实践.md
 docs/安全整改.md
+
+# vidnote-summary 技能二进制包（体积过大，不提交）
+config/skills/vidnote-summary/**/*.tar.gz
